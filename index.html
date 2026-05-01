@@ -959,6 +959,7 @@
   <script src="https://cdn.tailwindcss.com/3.4.17" type="text/javascript"></script>
   <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
   <script src="/_sdk/element_sdk.js" type="text/javascript"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js" type="text/javascript"></script>
  </head>
  <body><!-- Toast Notification -->
   <div id="toast" class="toast"><i class="fas fa-check-circle"></i> <span id="toastMessage"></span>
@@ -991,7 +992,7 @@
     </div>
     <div class="login-footer"><span class="version-badge">Versi 7.1.0</span>
      <p>Hak Cipta © 2026<br>
-      Kementerian Kelautan dan Perikanan</p>
+       Kementerian Kelautan dan Perikanan</p>
     </div>
    </div>
   </div><!-- Main Application -->
@@ -1095,8 +1096,14 @@
     <div id="pagePelakuUsaha" class="page">
      <div class="card">
       <div class="toolbar">
-       <div class="search-box"><i class="fas fa-search"></i> <input type="text" id="searchPelaku" placeholder="Cari pelaku usaha..." oninput="filterPelakuUsaha()">
+       <div class="search-box"><i class="fas fa-search"></i> <input type="text" id="searchPelaku" placeholder="Cari nama perusahaan, NIB, UPT, atau no. permohonan..." oninput="handlePelakuSearch()">
        </div><button class="btn btn-primary" onclick="openPelakuModal()"> <i class="fas fa-plus"></i> Tambah Data Pelaku Usaha </button>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+       <div style="display: flex; align-items: center; gap: 8px;"><label for="rowsPerPagePelaku" style="font-size: 14px; color: #475569;">Rows per page:</label> <select id="rowsPerPagePelaku" class="form-control" style="width: 80px;" onchange="changeRowsPerPagePelaku()"> <option value="5">5</option> <option value="10" selected>10</option> <option value="25">25</option> <option value="50">50</option> <option value="100">100</option> </select>
+       </div>
+       <div style="font-size: 14px; color: #64748b;"><span id="pelakuDataInfo">0 data</span>
+       </div>
       </div>
       <div class="table-container">
        <table class="data-table">
@@ -1114,6 +1121,8 @@
         <tbody id="pelakuTableBody"><!-- Data will be populated here -->
         </tbody>
        </table>
+      </div>
+      <div style="display: flex; justify-content: center; align-items: center; margin-top: 20px; gap: 8px;" id="pelakuPaginationContainer"><!-- Pagination will be here -->
       </div>
      </div>
     </div><!-- Verifikator Page -->
@@ -1366,6 +1375,11 @@
     let statusChart = null;
     let monthlyChart = null;
     let uptChart = null;
+
+    // Pagination variables
+    let pelakuCurrentPage = 1;
+    let pelakuRowsPerPage = 10;
+    let pelakuFilteredData = [];
 
     // =============================================
     // Initialization
@@ -1746,12 +1760,25 @@
       
       if (data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #64748b;">Tidak ada data</td></tr>';
+        document.getElementById('pelakuPaginationContainer').innerHTML = '';
+        document.getElementById('pelakuDataInfo').textContent = '0 data';
         return;
       }
       
-      tbody.innerHTML = data.map((item, index) => `
+      // Update filtered data
+      pelakuFilteredData = data;
+      pelakuCurrentPage = 1;
+      
+      // Calculate pagination
+      const totalPages = Math.ceil(data.length / pelakuRowsPerPage);
+      const startIndex = (pelakuCurrentPage - 1) * pelakuRowsPerPage;
+      const endIndex = startIndex + pelakuRowsPerPage;
+      const pageData = data.slice(startIndex, endIndex);
+      
+      // Render table rows
+      tbody.innerHTML = pageData.map((item, index) => `
         <tr>
-          <td>${index + 1}</td>
+          <td>${startIndex + index + 1}</td>
           <td><strong>${item.NamaPerusahaan}</strong></td>
           <td>${item.NIB}</td>
           <td>${item.NoPermohonan}</td>
@@ -1774,16 +1801,138 @@
           </td>
         </tr>
       `).join('');
+      
+      // Update data info
+      document.getElementById('pelakuDataInfo').textContent = `${data.length} data`;
+      
+      // Render pagination
+      renderPelakuPagination(totalPages, data.length);
     }
 
-    function filterPelakuUsaha() {
-      const searchTerm = document.getElementById('searchPelaku').value.toLowerCase();
-      const filtered = pelakuUsahaData.filter(item =>
-        item.NamaPerusahaan.toLowerCase().includes(searchTerm) ||
-        item.NIB.toLowerCase().includes(searchTerm) ||
-        item.NoPermohonan.toLowerCase().includes(searchTerm)
-      );
+    function renderPelakuPagination(totalPages, totalData) {
+      const container = document.getElementById('pelakuPaginationContainer');
+      
+      if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+      }
+      
+      let html = '';
+      
+      // Previous button
+      html += `
+        <button class="btn btn-sm" style="background: ${pelakuCurrentPage === 1 ? '#e2e8f0' : '#e0f2fe'}; color: ${pelakuCurrentPage === 1 ? '#94a3b8' : '#0369a1'}; cursor: ${pelakuCurrentPage === 1 ? 'not-allowed' : 'pointer'};" 
+          onclick="goToPelakuPage(${pelakuCurrentPage - 1})" ${pelakuCurrentPage === 1 ? 'disabled' : ''}>
+          <i class="fas fa-chevron-left"></i> Sebelumnya
+        </button>
+      `;
+      
+      // Page numbers
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= pelakuCurrentPage - 1 && i <= pelakuCurrentPage + 1)) {
+          html += `
+            <button class="btn btn-sm" style="background: ${i === pelakuCurrentPage ? '#0369a1' : '#e2e8f0'}; color: ${i === pelakuCurrentPage ? 'white' : '#475569'}; min-width: 40px;" 
+              onclick="goToPelakuPage(${i})">
+              ${i}
+            </button>
+          `;
+        } else if (i === 2 && pelakuCurrentPage > 3) {
+          html += `<span style="padding: 0 8px; color: #94a3b8;">...</span>`;
+        } else if (i === totalPages - 1 && pelakuCurrentPage < totalPages - 2) {
+          html += `<span style="padding: 0 8px; color: #94a3b8;">...</span>`;
+        }
+      }
+      
+      // Next button
+      html += `
+        <button class="btn btn-sm" style="background: ${pelakuCurrentPage === totalPages ? '#e2e8f0' : '#e0f2fe'}; color: ${pelakuCurrentPage === totalPages ? '#94a3b8' : '#0369a1'}; cursor: ${pelakuCurrentPage === totalPages ? 'not-allowed' : 'pointer'};" 
+          onclick="goToPelakuPage(${pelakuCurrentPage + 1})" ${pelakuCurrentPage === totalPages ? 'disabled' : ''}>
+          Selanjutnya <i class="fas fa-chevron-right"></i>
+        </button>
+      `;
+      
+      container.innerHTML = html;
+    }
+
+    function goToPelakuPage(pageNumber) {
+      const totalPages = Math.ceil(pelakuFilteredData.length / pelakuRowsPerPage);
+      
+      if (pageNumber < 1 || pageNumber > totalPages) {
+        return;
+      }
+      
+      pelakuCurrentPage = pageNumber;
+      
+      // Calculate pagination
+      const startIndex = (pelakuCurrentPage - 1) * pelakuRowsPerPage;
+      const endIndex = startIndex + pelakuRowsPerPage;
+      const pageData = pelakuFilteredData.slice(startIndex, endIndex);
+      
+      // Render table rows
+      const tbody = document.getElementById('pelakuTableBody');
+      tbody.innerHTML = pageData.map((item, index) => `
+        <tr>
+          <td>${startIndex + index + 1}</td>
+          <td><strong>${item.NamaPerusahaan}</strong></td>
+          <td>${item.NIB}</td>
+          <td>${item.NoPermohonan}</td>
+          <td>${item.NamaUPT}</td>
+          <td>
+            <span class="badge ${item.StatusPermohonan === 'Data Lengkap' ? 'badge-success' : 'badge-danger'}">
+              ${item.StatusPermohonan}
+            </span>
+          </td>
+          <td>
+            <button class="btn btn-icon btn-primary btn-sm" onclick="viewPelakuDetail('${item.ID}')" title="Lihat Detail">
+              <i class="fas fa-eye"></i>
+            </button>
+            <button class="btn btn-icon btn-warning btn-sm" onclick="editPelakuUsaha('${item.ID}')" title="Edit">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button class="btn btn-icon btn-danger btn-sm" onclick="deletePelakuUsaha('${item.ID}')" title="Hapus">
+              <i class="fas fa-trash"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+      
+      // Re-render pagination
+      renderPelakuPagination(totalPages, pelakuFilteredData.length);
+    }
+
+    function handlePelakuSearch() {
+      const searchTerm = document.getElementById('searchPelaku').value.toLowerCase().trim();
+      
+      if (searchTerm === '') {
+        renderPelakuTable(pelakuUsahaData);
+        return;
+      }
+      
+      const filtered = pelakuUsahaData.filter(item => {
+        const namaPerusahaan = (item.NamaPerusahaan || '').toLowerCase();
+        const nib = (item.NIB || '').toLowerCase();
+        const noPermohonan = (item.NoPermohonan || '').toLowerCase();
+        const namaUPT = (item.NamaUPT || '').toLowerCase();
+        
+        return (
+          namaPerusahaan.includes(searchTerm) ||
+          nib.includes(searchTerm) ||
+          noPermohonan.includes(searchTerm) ||
+          namaUPT.includes(searchTerm)
+        );
+      });
+      
       renderPelakuTable(filtered);
+    }
+
+    function submitPelakuSearch() {
+      handlePelakuSearch();
+    }
+
+    function changeRowsPerPagePelaku() {
+      pelakuRowsPerPage = parseInt(document.getElementById('rowsPerPagePelaku').value);
+      pelakuCurrentPage = 1;
+      renderPelakuTable(pelakuFilteredData.length > 0 ? pelakuFilteredData : pelakuUsahaData);
     }
 
     function openPelakuModal(isEdit = false) {
@@ -2591,5 +2740,5 @@
       });
     }
   </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9d5d1f52407ae9c8',t:'MTc3MjQyMDEyNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9d9eb90f115dea87',t:'MTc3MzEwNzk5Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
